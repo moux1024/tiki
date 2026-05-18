@@ -1,13 +1,8 @@
 // Written by Claude GLM-5.1
 
-import { GameState, Action, TILE_INFO, FRUIT_TO_WIN, posEqual } from "./types";
+import { GameState, Action, TILE_INFO, FRUIT_TO_WIN } from "./types";
 import { getAllValidActions, executeAction } from "./engine";
-import {
-  getValidCreatePositions,
-  getOwnedTotems,
-  canMoveTotem,
-  getMovePath,
-} from "./rules";
+import { getStep } from "./rules";
 
 export function getAIMove(
   state: GameState,
@@ -47,7 +42,6 @@ function mediumAI(state: GameState, actions: Action[]): Action {
 
 function evaluateAction(state: GameState, action: Action): number {
   const myId = state.currentPlayer;
-  const opponentId = myId === 0 ? 1 : 0;
   let score = 0;
 
   if (action.type === "create") {
@@ -57,9 +51,8 @@ function evaluateAction(state: GameState, action: Action): number {
     // Prefer creating on positive tiles
     score += info.effect * 5;
 
-    // Check if creating here would make height 3 eventually
     // Prefer tiles where we can later stack to 3
-    const adjacentPositive = countAdjacentPositive(state, action.position, myId);
+    const adjacentPositive = countAdjacentPositive(state, action.position);
     score += adjacentPositive * 2;
 
     // Slight preference for center
@@ -70,45 +63,51 @@ function evaluateAction(state: GameState, action: Action): number {
   }
 
   if (action.type === "move") {
-    const from = action.from;
-    const dir = action.direction;
+    const { from, directions } = action;
     const height = state.board[from.row][from.col].stack.length;
-    const path = getMovePath(from, dir, height);
 
-    // The top piece (last in stack) lands at the final position
-    const finalPos = path[path.length - 1];
-    const finalVillage = state.board[finalPos.row][finalPos.col];
-    const existingStack = finalVillage.stack.length;
+    // Simulate the caterpillar move to find drop positions
+    let currentPos = from;
+    for (let i = 0; i < height; i++) {
+      // Piece i is dropped at currentPos
+      const existingStack = state.board[currentPos.row][currentPos.col].stack.length;
 
-    // If the final stack will be height 3, check tile effect
-    if (existingStack + 1 >= 3) {
-      const effect = TILE_INFO[finalVillage.tileType].effect;
-      score += effect * 15;
-
-      // Winning move!
-      if (effect > 0 && state.players[myId].fruits + effect >= FRUIT_TO_WIN) {
-        score += 100;
+      // Adjust for pieces already dropped in this simulation
+      // The first drop is at `from`, which starts with height pieces that are all removed first
+      // So existingStack for `from` is 0 (we removed all), plus 1 for the dropped piece
+      let effectiveExisting: number;
+      if (i === 0) {
+        // At `from`, all original pieces are removed, then piece 0 is dropped
+        effectiveExisting = 0;
+      } else {
+        // At other positions, existing pieces + pieces dropped by this move
+        effectiveExisting = existingStack;
       }
-    }
 
-    // Also check intermediate positions that might reach height 3
-    for (let i = 0; i < path.length - 1; i++) {
-      const stepPos = path[i];
-      const stepVillage = state.board[stepPos.row][stepPos.col];
-      if (stepVillage.stack.length + 1 >= 3) {
-        const effect = TILE_INFO[stepVillage.tileType].effect;
-        score += effect * 10;
+      const newStackHeight = effectiveExisting + 1;
+
+      if (newStackHeight >= 3) {
+        const village = state.board[currentPos.row][currentPos.col];
+        const effect = TILE_INFO[village.tileType].effect;
+        const pieceOwner = state.board[from.row][from.col].stack[i].owner;
+
+        if (pieceOwner === myId) {
+          score += effect * 15;
+          if (effect > 0 && state.players[myId].fruits + effect >= FRUIT_TO_WIN) {
+            score += 100;
+          }
+        } else {
+          // Opponent's piece on top of resolved totem
+          score += effect * -10;
+        }
       }
+
+      currentPos = getStep(currentPos, directions[i]);
     }
 
-    // Avoid moving onto cursed tiles
-    if (TILE_INFO[finalVillage.tileType].effect < 0 && existingStack + 1 < 3) {
-      score -= 3;
-    }
-
-    // Prefer moving towards positive tiles
-    const adjPositive = countAdjacentPositive(state, finalPos, myId);
-    score += adjPositive;
+    // Prefer moves towards positive tiles
+    const adjPositive = countAdjacentPositive(state, currentPos);
+    score += adjPositive * 0.5;
 
     return score;
   }
@@ -118,8 +117,7 @@ function evaluateAction(state: GameState, action: Action): number {
 
 function countAdjacentPositive(
   state: GameState,
-  pos: { row: number; col: number },
-  _playerId: number
+  pos: { row: number; col: number }
 ): number {
   let count = 0;
   const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];

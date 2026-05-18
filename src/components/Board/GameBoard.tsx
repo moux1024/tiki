@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useGameStore } from "../../store/gameStore";
 import { BOARD_SIZE } from "../../game/types";
-import { getValidCreatePositions, getOwnedTotems, canMoveTotem } from "../../game/rules";
+import { getValidCreatePositions, getOwnedTotems } from "../../game/rules";
 import VillageTile from "./VillageTile";
 
 export default function GameBoard() {
@@ -11,6 +11,8 @@ export default function GameBoard() {
   const selectedAction = useGameStore((s) => s.selectedAction);
   const selectedCell = useGameStore((s) => s.selectedCell);
   const selectCell = useGameStore((s) => s.selectCell);
+  const moveRemainingSteps = useGameStore((s) => s.moveRemainingSteps);
+  const moveCurrentPos = useGameStore((s) => s.moveCurrentPos);
 
   const validCreatePositions = useMemo(
     () => getValidCreatePositions(gameState),
@@ -32,10 +34,9 @@ export default function GameBoard() {
     }
 
     if (selectedAction === "move") {
-      if (selectedCell) {
-        // Already selected a totem, show direction indicators aren't on tiles
-        return false;
-      }
+      // During multi-step direction selection, cells aren't selectable
+      if (selectedCell && moveRemainingSteps > 0) return false;
+      // Select a totem to move
       return ownedTotems.some((t) => t.position.row === row && t.position.col === col);
     }
 
@@ -44,6 +45,12 @@ export default function GameBoard() {
 
   const isSelected = (row: number, col: number): boolean => {
     return selectedCell !== null && selectedCell.row === row && selectedCell.col === col;
+  };
+
+  /** Highlight the virtual position during multi-step move */
+  const isVirtualPosition = (row: number, col: number): boolean => {
+    if (!moveCurrentPos || moveRemainingSteps <= 0) return false;
+    return moveCurrentPos.row === row && moveCurrentPos.col === col;
   };
 
   const tiles = [];
@@ -77,6 +84,26 @@ export default function GameBoard() {
         <boxGeometry args={[7.2, 0.08, 7.2]} />
         <meshStandardMaterial color="#5D3A1A" roughness={0.8} />
       </mesh>
+
+      {/* Virtual position indicator during multi-step move */}
+      {moveCurrentPos && moveRemainingSteps > 0 && (
+        <mesh
+          position={[
+            (moveCurrentPos.col - 1) * 2.5,
+            0.15,
+            (moveCurrentPos.row - 1) * 2.5,
+          ]}
+        >
+          <boxGeometry args={[2, 0.05, 2]} />
+          <meshStandardMaterial
+            color="#fbbf24"
+            transparent
+            opacity={0.4}
+            emissive="#fbbf24"
+            emissiveIntensity={0.3}
+          />
+        </mesh>
+      )}
 
       {tiles}
     </group>

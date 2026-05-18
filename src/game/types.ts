@@ -33,7 +33,7 @@ export type Direction = "up" | "down" | "left" | "right";
 
 export type Action =
   | { type: "create"; position: BoardPosition }
-  | { type: "move"; from: BoardPosition; direction: Direction };
+  | { type: "move"; from: BoardPosition; directions: Direction[] };
 
 export interface GameState {
   board: Village[][];

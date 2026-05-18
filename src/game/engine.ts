@@ -15,7 +15,7 @@ import {
   getValidCreatePositions,
   getOwnedTotems,
   canMoveTotem,
-  getMovePath,
+  getStep,
   resolveAffectedVillages,
   checkWinCondition,
   createPiece,
@@ -78,32 +78,40 @@ export function executeAction(state: GameState, action: Action): GameState {
   }
 
   if (action.type === "move") {
-    const { from, direction } = action;
-    if (!canMoveTotem(state, from, direction)) return state;
+    const { from, directions } = action;
+    if (!canMoveTotem(state, from, directions)) return state;
 
     const village = state.board[from.row][from.col];
     const height = village.stack.length;
-    const path = getMovePath(from, direction, height);
 
     const newBoard = state.board.map((row) =>
       row.map((v) => ({ ...v, stack: [...v.stack] }))
     );
 
-    // Remove all pieces from source
+    // Take all pieces from source
     const movingPieces = [...newBoard[from.row][from.col].stack];
     newBoard[from.row][from.col] = { ...newBoard[from.row][from.col], stack: [] };
 
-    // Place pieces along the path: bottom piece stays at each step
+    // Caterpillar move: for each step, drop the bottom piece at the current position, then move
     const affectedPositions: BoardPosition[] = [];
+    let currentPos = from;
+
     for (let i = 0; i < height; i++) {
-      const stepPos = path[i];
-      const pieceToLeave = movingPieces[i];
-      newBoard[stepPos.row][stepPos.col] = {
-        ...newBoard[stepPos.row][stepPos.col],
-        stack: [...newBoard[stepPos.row][stepPos.col].stack, pieceToLeave],
+      const pieceToLeave = movingPieces[i]; // bottom piece of remaining stack
+
+      // Drop the bottom piece at current position
+      newBoard[currentPos.row][currentPos.col] = {
+        ...newBoard[currentPos.row][currentPos.col],
+        stack: [...newBoard[currentPos.row][currentPos.col].stack, pieceToLeave],
       };
-      affectedPositions.push(stepPos);
+      affectedPositions.push(currentPos);
+
+      // Move to next position
+      currentPos = getStep(currentPos, directions[i]);
     }
+
+    // After all steps, all pieces have been dropped. currentPos is the final destination
+    // but no piece remains there.
 
     let newState: GameState = { ...state, board: newBoard };
 
@@ -126,28 +134,50 @@ function switchTurn(state: GameState): GameState {
   const next = (state.currentPlayer === 0 ? 1 : 0) as 0 | 1;
 
   // Check if next player has any valid actions
-  const canCreate = state.players[next].supply > 0 && getValidCreatePositions(state).length > 0;
-  const canMove = getOwnedTotems(state, next).some((t) => {
-    return (["up", "down", "left", "right"] as const).some(
-      (d) => canMoveTotem({ ...state, currentPlayer: next }, t.position, d)
-    );
-  });
+  const nextState = { ...state, currentPlayer: next };
+  const canCreate = state.players[next].supply > 0 && getValidCreatePositions(nextState).length > 0;
+  const canMove = getAllValidActions(nextState).some((a) => a.type === "move");
 
   if (!canCreate && !canMove) {
     // Next player can't move - check if current player also can't
     const curCanCreate = state.players[state.currentPlayer].supply > 0 && getValidCreatePositions(state).length > 0;
-    const curCanMove = getOwnedTotems(state, state.currentPlayer).some((t) => {
-      return (["up", "down", "left", "right"] as const).some(
-        (d) => canMoveTotem(state, t.position, d)
-      );
-    });
+    const curCanMove = getAllValidActions(state).some((a) => a.type === "move");
     if (!curCanCreate && !curCanMove) {
       const result = checkWinCondition(state);
       return { ...state, phase: "gameOver", winner: result.winner ?? null };
     }
   }
 
-  return { ...state, currentPlayer: next };
+  return nextState;
+}
+
+/** Generate all valid direction sequences of given length from a starting position */
+function generateDirectionSequences(
+  from: BoardPosition,
+  length: number
+): Direction[][] {
+  if (length === 0) return [[]];
+
+  const allDirections: Direction[] = ["up", "down", "left", "right"];
+  const results: Direction[][] = [];
+
+  function backtrack(currentPos: BoardPosition, seq: Direction[]) {
+    if (seq.length === length) {
+      results.push([...seq]);
+      return;
+    }
+    for (const dir of allDirections) {
+      const next = getStep(currentPos, dir);
+      if (next.row >= 0 && next.row < BOARD_SIZE && next.col >= 0 && next.col < BOARD_SIZE) {
+        seq.push(dir);
+        backtrack(next, seq);
+        seq.pop();
+      }
+    }
+  }
+
+  backtrack(from, []);
+  return results;
 }
 
 export function getAllValidActions(state: GameState): Action[] {
@@ -161,12 +191,14 @@ export function getAllValidActions(state: GameState): Action[] {
     }
   }
 
-  // Move actions
+  // Move actions: for each owned totem, generate all valid direction sequences
   for (const totem of getOwnedTotems(state, state.currentPlayer)) {
-    for (const dir of ["up", "down", "left", "right"] as const) {
-      if (canMoveTotem(state, totem.position, dir)) {
-        actions.push({ type: "move", from: totem.position, direction: dir });
-      }
+    // Only height 1 or 2 can be moved (height 3 resolves immediately)
+    if (totem.height >= TOTEM_RESOLVE_HEIGHT) continue;
+
+    const sequences = generateDirectionSequences(totem.position, totem.height);
+    for (const dirs of sequences) {
+      actions.push({ type: "move", from: totem.position, directions: dirs });
     }
   }
 

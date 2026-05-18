@@ -2,7 +2,7 @@
 
 import { useGameStore } from "../../store/gameStore";
 import { PLAYER_COLORS, Direction } from "../../game/types";
-import { canMoveTotem } from "../../game/rules";
+import { getStep } from "../../game/rules";
 
 export default function GameHUD() {
   const gameState = useGameStore((s) => s.gameState);
@@ -10,7 +10,11 @@ export default function GameHUD() {
   const selectedCell = useGameStore((s) => s.selectedCell);
   const selectAction = useGameStore((s) => s.selectAction);
   const selectDirection = useGameStore((s) => s.selectDirection);
+  const cancelMove = useGameStore((s) => s.cancelMove);
   const animating = useGameStore((s) => s.animating);
+  const moveStepDirections = useGameStore((s) => s.moveStepDirections);
+  const moveRemainingSteps = useGameStore((s) => s.moveRemainingSteps);
+  const moveCurrentPos = useGameStore((s) => s.moveCurrentPos);
 
   if (gameState.phase !== "playing") return null;
 
@@ -31,9 +35,13 @@ export default function GameHUD() {
   ];
 
   const canMoveDir = (dir: Direction): boolean => {
-    if (!selectedCell) return false;
-    return canMoveTotem(gameState, selectedCell, dir);
+    if (!moveCurrentPos) return false;
+    const next = getStep(moveCurrentPos, dir);
+    return next.row >= 0 && next.row < 3 && next.col >= 0 && next.col < 3;
   };
+
+  const totalSteps = moveStepDirections.length + moveRemainingSteps;
+  const currentStep = moveStepDirections.length + 1;
 
   return (
     <div className="absolute inset-0 pointer-events-none z-40">
@@ -81,12 +89,17 @@ export default function GameHUD() {
       {!isAITurn && (
         <div className="absolute bottom-0 left-0 right-0 p-4 pointer-events-auto">
           <div className="flex flex-col items-center gap-3">
-            {/* Direction buttons (shown when move selected and totem selected) */}
-            {selectedAction === "move" && selectedCell && (
+            {/* Direction buttons (shown during multi-step move) */}
+            {selectedAction === "move" && selectedCell && moveRemainingSteps > 0 && (
               <div className="bg-black/70 backdrop-blur-md rounded-xl p-3 border border-amber-500/20">
-                <div className="text-center text-amber-200/60 text-xs mb-2">
-                  Choose direction:
+                <div className="text-center text-amber-200/60 text-xs mb-1">
+                  Step {currentStep} of {totalSteps}: Choose direction
                 </div>
+                {moveStepDirections.length > 0 && (
+                  <div className="text-center text-amber-200/40 text-xs mb-2">
+                    Path: {moveStepDirections.map(d => d === "up" ? "↑" : d === "down" ? "↓" : d === "left" ? "←" : "→").join(" ")}
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-1 w-32">
                   <div />
                   <button
@@ -146,9 +159,11 @@ export default function GameHUD() {
               <div className="text-center text-amber-200/60 text-xs mb-2">
                 {selectedAction === "move" && !selectedCell
                   ? "Select a totem to move"
-                  : selectedAction === "create"
-                    ? "Select empty village to place piece"
-                    : "Choose an action:"}
+                  : selectedAction === "move" && selectedCell && moveRemainingSteps > 0
+                    ? `Step ${currentStep} of ${totalSteps}: Choose direction`
+                    : selectedAction === "create"
+                      ? "Select empty village to place piece"
+                      : "Choose an action:"}
               </div>
               <div className="flex gap-2">
                 <button
@@ -178,7 +193,13 @@ export default function GameHUD() {
                   ➡️ Move
                 </button>
                 <button
-                  onClick={() => selectAction("none")}
+                  onClick={() => {
+                    if (selectedAction === "move" && selectedCell && moveRemainingSteps > 0) {
+                      cancelMove();
+                    } else {
+                      selectAction("none");
+                    }
+                  }}
                   className="px-3 py-2 rounded-lg text-sm bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
                 >
                   Cancel
