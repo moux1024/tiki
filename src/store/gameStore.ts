@@ -30,8 +30,16 @@ interface GameStore {
   executeMove: (from: BoardPosition, direction: Direction) => void;
 }
 
+const placeholderBoard: GameState["board"] = Array.from({ length: 3 }, (_, r) =>
+  Array.from({ length: 3 }, (_, c) => ({
+    position: { row: r, col: c },
+    tileType: "swamp" as const,
+    stack: [],
+  }))
+);
+
 const defaultState: GameState = {
-  board: [[], [], []] as any,
+  board: placeholderBoard,
   players: [
     { id: 0, color: "red", fruits: 0, supply: 8 },
     { id: 1, color: "blue", fruits: 0, supply: 8 },
