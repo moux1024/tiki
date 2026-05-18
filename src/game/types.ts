@@ -1,73 +1,78 @@
 // Written by Claude GLM-5.1
 
-export interface HexCoord {
-  q: number;
-  r: number;
+export interface BoardPosition {
+  row: number;
+  col: number;
 }
 
-export type PlayerColor = 'red' | 'blue' | 'green' | 'yellow';
+export type TileType = "plus2" | "plus1" | "swamp" | "cursed";
+
+export type PlayerColor = "red" | "blue";
 
 export interface TikiPiece {
   id: string;
-  color: PlayerColor;
-  height: number;
-  position: HexCoord;
+  owner: number;
+}
+
+export interface Village {
+  position: BoardPosition;
+  tileType: TileType;
+  stack: TikiPiece[];
 }
 
 export interface Player {
   id: number;
-  name: string;
   color: PlayerColor;
-  score: number;
-  remainingPieces: number;
-  isAI: boolean;
-  aiDifficulty?: 'easy' | 'medium';
+  fruits: number;
+  supply: number;
 }
 
-export type GamePhase = 'menu' | 'playing' | 'gameOver';
-export type ActionType = 'place' | 'move' | 'ascend' | 'sacrifice' | 'none';
+export type GamePhase = "menu" | "playing" | "gameOver";
 
-export interface CellState {
-  coord: HexCoord;
-  stackHeight: number;
-  ownerId: number | null; // player id or null
-  pieces: TikiPiece[];
-  isSacredSite: boolean;
-}
+export type Direction = "up" | "down" | "left" | "right";
+
+export type Action =
+  | { type: "create"; position: BoardPosition }
+  | { type: "move"; from: BoardPosition; direction: Direction };
 
 export interface GameState {
-  board: Map<string, CellState>;
-  players: Player[];
-  currentPlayerIndex: number;
+  board: Village[][];
+  players: [Player, Player];
+  currentPlayer: 0 | 1;
   phase: GamePhase;
-  selectedAction: ActionType;
-  selectedCell: HexCoord | null;
+  fruitSupply: number;
   winner: number | null;
-  boardRadius: number;
-  turnCount: number;
+  vsAI: boolean;
 }
 
-export interface MoveAction {
-  type: 'place' | 'move' | 'ascend' | 'sacrifice';
-  from?: HexCoord;
-  to: HexCoord;
-  playerId: number;
-}
+export const FRUIT_TO_WIN = 4;
+export const PIECES_PER_PLAYER = 8;
+export const BOARD_SIZE = 3;
+export const TOTEM_RESOLVE_HEIGHT = 3;
+
+export const TILE_DISTRIBUTION: TileType[] = [
+  "plus2", "plus2",
+  "plus1", "plus1", "plus1",
+  "swamp", "swamp",
+  "cursed", "cursed",
+];
+
+export const TILE_INFO: Record<TileType, { label: string; emoji: string; color: string; effect: number }> = {
+  plus2:  { label: "Rich Harvest", emoji: "🍍", color: "#2ecc71", effect: 2 },
+  plus1:  { label: "Harvest",      emoji: "🍎", color: "#82e0aa", effect: 1 },
+  swamp:  { label: "Swamp",        emoji: "🌿", color: "#5d6d7e", effect: 0 },
+  cursed: { label: "Cursed",       emoji: "💀", color: "#8e44ad", effect: -1 },
+};
 
 export const PLAYER_COLORS: Record<PlayerColor, string> = {
-  red: '#e74c3c',
-  blue: '#3498db',
-  green: '#2ecc71',
-  yellow: '#f1c40f',
+  red:  "#e74c3c",
+  blue: "#3498db",
 };
 
-export const PLAYER_COLOR_NAMES: Record<PlayerColor, string> = {
-  red: 'Volcanic Red',
-  blue: 'Ocean Blue',
-  green: 'Jungle Green',
-  yellow: 'Sun Gold',
-};
+export function posEqual(a: BoardPosition, b: BoardPosition): boolean {
+  return a.row === b.row && a.col === b.col;
+}
 
-export const MAX_PIECES_PER_PLAYER = 12;
-export const SACRED_SITE_COUNT = 6;
-export const BOARD_RADIUS = 4;
+export function posKey(p: BoardPosition): string {
+  return `${p.row},${p.col}`;
+}

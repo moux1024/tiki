@@ -1,31 +1,29 @@
 // Written by Claude GLM-5.1
 
-import { useRef } from 'react';
-import { Group } from 'three';
-import { TikiPiece, PLAYER_COLORS } from '../../game/types';
-import TikiPiece3D from './TikiPiece3D';
+import { TikiPiece } from "../../game/types";
+import TikiPiece3D from "./TikiPiece3D";
 
-interface TikiStackProps {
+interface Props {
   pieces: TikiPiece[];
-  ownerId: number | null;
   position: [number, number, number];
 }
 
-export default function TikiStack({ pieces, ownerId, position }: TikiStackProps) {
-  const groupRef = useRef<Group>(null);
-
+export default function TikiStack({ pieces, position }: Props) {
   if (pieces.length === 0) return null;
 
   return (
-    <group ref={groupRef} position={position}>
+    <group position={position}>
       {pieces.map((piece, index) => {
         const y = index * 0.55;
+        const isTop = index === pieces.length - 1;
+        const color = piece.owner === 0 ? "red" as const : "blue" as const;
         return (
           <TikiPiece3D
             key={piece.id}
-            piece={piece}
+            owner={piece.owner}
             position={[0, y, 0]}
-            isTop={index === pieces.length - 1}
+            isTop={isTop}
+            color={color}
           />
         );
       })}

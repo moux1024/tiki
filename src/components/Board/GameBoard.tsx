@@ -1,85 +1,84 @@
 // Written by Claude GLM-5.1
 
-import { useState, useMemo } from 'react';
-import { useGameStore } from '../../store/gameStore';
-import { HexCoord } from '../../game/types';
-import { getCell, hexKey } from '../../game/engine';
-import HexCell from './HexCell';
+import { useMemo } from "react";
+import { useGameStore } from "../../store/gameStore";
+import { BOARD_SIZE } from "../../game/types";
+import { getValidCreatePositions, getOwnedTotems, canMoveTotem } from "../../game/rules";
+import VillageTile from "./VillageTile";
 
 export default function GameBoard() {
-  const board = useGameStore((s) => s.board);
-  const handleCellClick = useGameStore((s) => s.handleCellClick);
-  const selectedCell = useGameStore((s) => s.selectedCell);
+  const gameState = useGameStore((s) => s.gameState);
   const selectedAction = useGameStore((s) => s.selectedAction);
-  const currentPlayerIndex = useGameStore((s) => s.currentPlayerIndex);
-  const phase = useGameStore((s) => s.phase);
+  const selectedCell = useGameStore((s) => s.selectedCell);
+  const selectCell = useGameStore((s) => s.selectCell);
 
-  const [hoveredCell, setHoveredCell] = useState<HexCoord | null>(null);
+  const validCreatePositions = useMemo(
+    () => getValidCreatePositions(gameState),
+    [gameState]
+  );
 
-  const cells = useMemo(() => {
-    return Array.from(board.values());
-  }, [board]);
+  const ownedTotems = useMemo(
+    () => getOwnedTotems(gameState, gameState.currentPlayer),
+    [gameState]
+  );
 
-  const isValidTarget = (coord: HexCoord): boolean => {
-    if (phase !== 'playing') return false;
-    const cell = getCell(board, coord);
-    if (!cell) return false;
+  const isVillageSelectable = (row: number, col: number): boolean => {
+    if (gameState.phase !== "playing") return false;
+    const player = gameState.players[gameState.currentPlayer];
 
-    // For move action with source selected, show valid destinations
-    if (selectedAction === 'move' && selectedCell) {
-      const fromCell = getCell(board, selectedCell);
-      if (fromCell && fromCell.ownerId === currentPlayerIndex) {
-        // Adjacent cells that can be moved to
-        const dx = Math.abs(coord.q - selectedCell.q);
-        const dz = Math.abs(coord.r - selectedCell.r);
-        const dist = (dx + dz + Math.abs(coord.q + coord.r - selectedCell.q - selectedCell.r)) / 2;
-        if (dist === 1) return true;
+    if (selectedAction === "create") {
+      if (player.supply <= 0) return false;
+      return validCreatePositions.some((p) => p.row === row && p.col === col);
+    }
+
+    if (selectedAction === "move") {
+      if (selectedCell) {
+        // Already selected a totem, show direction indicators aren't on tiles
+        return false;
       }
-      return false;
+      return ownedTotems.some((t) => t.position.row === row && t.position.col === col);
     }
 
-    // Show cells where current player can act
-    if (selectedAction === 'place') {
-      return cell.ownerId === null || (cell.ownerId === currentPlayerIndex && cell.stackHeight < 4);
-    }
-    if (selectedAction === 'move') {
-      return cell.ownerId === currentPlayerIndex && cell.pieces.length > 0;
-    }
-    if (selectedAction === 'ascend') {
-      return cell.ownerId === currentPlayerIndex && cell.pieces.length >= 2;
-    }
-    if (selectedAction === 'sacrifice') {
-      return cell.ownerId === currentPlayerIndex && cell.pieces.length > 0;
-    }
-
-    // Default: highlight own cells and empty cells
-    return cell.ownerId === null || cell.ownerId === currentPlayerIndex;
+    return false;
   };
 
+  const isSelected = (row: number, col: number): boolean => {
+    return selectedCell !== null && selectedCell.row === row && selectedCell.col === col;
+  };
+
+  const tiles = [];
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      const village = gameState.board[r]?.[c];
+      if (!village) continue;
+      tiles.push(
+        <VillageTile
+          key={`${r}-${c}`}
+          village={village}
+          isSelectable={isVillageSelectable(r, c)}
+          isSelected={isSelected(r, c)}
+          onClick={() => selectCell({ row: r, col: c })}
+        />
+      );
+    }
+  }
+
+  // Board frame
   return (
     <group>
-      {cells.map((cell) => {
-        const key = hexKey(cell.coord.q, cell.coord.r);
-        return (
-          <HexCell
-            key={key}
-            cell={cell}
-            isHovered={
-              hoveredCell !== null &&
-              hoveredCell.q === cell.coord.q &&
-              hoveredCell.r === cell.coord.r
-            }
-            isSelected={
-              selectedCell !== null &&
-              selectedCell.q === cell.coord.q &&
-              selectedCell.r === cell.coord.r
-            }
-            isValidTarget={isValidTarget(cell.coord)}
-            onClick={handleCellClick}
-            onHover={setHoveredCell}
-          />
-        );
-      })}
+      {/* Board base */}
+      <mesh position={[0, -0.05, 0]} receiveShadow>
+        <boxGeometry args={[7, 0.1, 7]} />
+        <meshStandardMaterial color="#8B4513" roughness={0.9} metalness={0.05} />
+      </mesh>
+
+      {/* Board border */}
+      <mesh position={[0, 0.02, 0]}>
+        <boxGeometry args={[7.2, 0.08, 7.2]} />
+        <meshStandardMaterial color="#5D3A1A" roughness={0.8} />
+      </mesh>
+
+      {tiles}
     </group>
   );
 }
