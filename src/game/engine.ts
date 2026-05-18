@@ -92,26 +92,37 @@ export function executeAction(state: GameState, action: Action): GameState {
     const movingPieces = [...newBoard[from.row][from.col].stack];
     newBoard[from.row][from.col] = { ...newBoard[from.row][from.col], stack: [] };
 
-    // Caterpillar move: for each step, drop the bottom piece at the current position, then move
+    // Height 1 special case: the whole piece moves to the target (no caterpillar drop)
+    // Height 2+: caterpillar drop — each step drops the bottom piece at current position
     const affectedPositions: BoardPosition[] = [];
-    let currentPos = from;
 
-    for (let i = 0; i < height; i++) {
-      const pieceToLeave = movingPieces[i]; // bottom piece of remaining stack
-
-      // Drop the bottom piece at current position
-      newBoard[currentPos.row][currentPos.col] = {
-        ...newBoard[currentPos.row][currentPos.col],
-        stack: [...newBoard[currentPos.row][currentPos.col].stack, pieceToLeave],
+    if (height === 1) {
+      // Height 1: move the single piece directly to the target
+      const targetPos = getStep(from, directions[0]);
+      newBoard[targetPos.row][targetPos.col] = {
+        ...newBoard[targetPos.row][targetPos.col],
+        stack: [...newBoard[targetPos.row][targetPos.col].stack, movingPieces[0]],
       };
-      affectedPositions.push(currentPos);
+      affectedPositions.push(targetPos);
+    } else {
+      // Height 2+: caterpillar drop
+      let currentPos = from;
+      for (let i = 0; i < height; i++) {
+        const pieceToLeave = movingPieces[i]; // bottom piece of remaining stack
 
-      // Move to next position
-      currentPos = getStep(currentPos, directions[i]);
+        // Drop the bottom piece at current position
+        newBoard[currentPos.row][currentPos.col] = {
+          ...newBoard[currentPos.row][currentPos.col],
+          stack: [...newBoard[currentPos.row][currentPos.col].stack, pieceToLeave],
+        };
+        affectedPositions.push(currentPos);
+
+        // Move to next position
+        currentPos = getStep(currentPos, directions[i]);
+      }
+      // After all steps, all pieces have been dropped. currentPos is the final destination
+      // but no piece remains there.
     }
-
-    // After all steps, all pieces have been dropped. currentPos is the final destination
-    // but no piece remains there.
 
     let newState: GameState = { ...state, board: newBoard };
 
